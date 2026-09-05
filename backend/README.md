@@ -25,6 +25,17 @@ cd backend && python3 -m unittest discover -s tests -p 'test_*.py' -v
 
 Each test runs against a fresh temporary SQLite database; the storage directory is never touched.
 
+## Deployment
+
+`server.py` serves both the static map and the JSON API, so a single instance is enough.
+
+- Set `HOLDER_MAP_HOST=0.0.0.0` to accept external connections (the safe localhost default is intentional).
+- Set `PORT` to the platform-injected port (Render/Fly/Railway each provide one).
+- Store `HOLDER_MAP_DATABASE` (or the `storage/` directory) on a persistent volume so counts survive restarts.
+- API responses carry `Access-Control-Allow-Origin: *` and `Cache-Control: no-store`, so the GitHub Pages frontend can fetch them. Point the site at the deployed API by setting `apiBase` in `index.html`.
+
+TLS is terminated by the hosting platform's proxy; the process itself stays plain HTTP on the injected port.
+
 ## Public API
 
 - `GET /api/map` returns only regions at or above the display threshold.

@@ -39,9 +39,11 @@ function renderMap() {
 
 renderMap();
 
+const apiBase = (window.HOLDER_MAP_CONFIG && window.HOLDER_MAP_CONFIG.apiBase) || "";
+
 async function loadAggregateCounts() {
   try {
-    const [mapResponse, statsResponse] = await Promise.all([fetch("/api/map"), fetch("/api/stats")]);
+    const [mapResponse, statsResponse] = await Promise.all([fetch(`${apiBase}/api/map`), fetch(`${apiBase}/api/stats`)]);
     if (!mapResponse.ok || !statsResponse.ok) return;
     const mapData = await mapResponse.json();
     const stats = await statsResponse.json();

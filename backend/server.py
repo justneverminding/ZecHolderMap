@@ -10,6 +10,7 @@ from urllib.parse import urlparse
 from database import DISPLAY_THRESHOLD, initialize, public_regions, public_stats
 
 ROOT = Path(__file__).resolve().parent.parent
+HOST = os.environ.get("HOLDER_MAP_HOST", "127.0.0.1")
 PORT = int(os.environ.get("PORT", "4173"))
 
 
@@ -25,10 +26,18 @@ class Handler(SimpleHTTPRequestHandler):
             return self.json(public_stats())
         return super().do_GET()
 
+    def do_OPTIONS(self):
+        self.send_response(HTTPStatus.NO_CONTENT)
+        self.send_header("Access-Control-Allow-Origin", "*")
+        self.send_header("Access-Control-Allow-Methods", "GET, OPTIONS")
+        self.send_header("Access-Control-Allow-Headers", "*")
+        self.end_headers()
+
     def json(self, payload):
         body = json.dumps(payload).encode("utf-8")
         self.send_response(HTTPStatus.OK)
         self.send_header("Content-Type", "application/json; charset=utf-8")
+        self.send_header("Access-Control-Allow-Origin", "*")
         self.send_header("Cache-Control", "no-store")
         self.send_header("Content-Length", str(len(body)))
         self.end_headers()
@@ -37,5 +46,5 @@ class Handler(SimpleHTTPRequestHandler):
 
 if __name__ == "__main__":
     initialize()
-    print(f"Holder Map testnet backend: http://127.0.0.1:{PORT}")
-    ThreadingHTTPServer(("127.0.0.1", PORT), Handler).serve_forever()
+    print(f"Holder Map backend: http://{HOST}:{PORT}")
+    ThreadingHTTPServer((HOST, PORT), Handler).serve_forever()
