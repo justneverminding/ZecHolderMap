@@ -1,0 +1,614 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>Sky Dash - Aeroplane Game</title>
+<style>
+  * { margin: 0; padding: 0; box-sizing: border-box; }
+  body {
+    background: #0b1d33;
+    display: flex;
+    align-items: center;
+    justify-content: center;
+    height: 100vh;
+    font-family: 'Segoe UI', system-ui, sans-serif;
+    overflow: hidden;
+  }
+  #wrap { position: relative; }
+  canvas {
+    display: block;
+    background: linear-gradient(#3a8fe0, #87c7f0 45%, #eaf7c9);
+    border-radius: 12px;
+    box-shadow: 0 10px 40px rgba(0,0,0,.5);
+    cursor: none;
+    touch-action: none;
+  }
+  #hud {
+    position: absolute;
+    top: 12px; left: 0; right: 0;
+    display: flex; justify-content: space-between; align-items: center;
+    padding: 0 20px;
+    font-size: 22px;
+    color: #fff;
+    font-weight: 700;
+    text-shadow: 0 2px 6px rgba(0,0,0,.4);
+    pointer-events: none;
+  }
+  #shield {
+    display: none;
+    color: #7fd4ff;
+    font-size: 16px;
+  }
+  #mute {
+    pointer-events: auto;
+    background: none;
+    border: 2px solid rgba(255,255,255,.6);
+    border-radius: 50%;
+    padding: 4px 8px;
+    font-size: 16px;
+    box-shadow: none;
+    color: #fff;
+    cursor: pointer;
+  }
+  #mute:hover { transform: scale(1.1); }
+  .overlay {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    background: rgba(11,29,51,.55);
+    border-radius: 12px;
+    color: #fff;
+    text-align: center;
+    padding: 20px;
+  }
+  .overlay h1 { font-size: 44px; letter-spacing: 2px; text-shadow: 0 4px 12px rgba(0,0,0,.5); }
+  .overlay p  { font-size: 16px; opacity: .95; line-height: 1.6; }
+  button {
+    padding: 14px 38px;
+    font-size: 20px;
+    font-weight: 700;
+    border: none;
+    border-radius: 30px;
+    background: #ffb703;
+    color: #1a1a2e;
+    cursor: pointer;
+    box-shadow: 0 6px 16px rgba(255,183,3,.4);
+    transition: transform .1s;
+  }
+  button:hover { transform: scale(1.06); }
+  #tip {
+    position: absolute; bottom: 14px; left: 0; right: 0;
+    text-align: center; color: #fff; font-size: 14px;
+    text-shadow: 0 1px 4px rgba(0,0,0,.4); pointer-events: none;
+  }
+</style>
+</head>
+<body>
+<div id="wrap">
+  <canvas id="game" width="900" height="600"></canvas>
+  <div id="hud">
+    <span>✈ <span id="score">0</span> <span id="shield">🛡 <span id="shieldTime"></span></span></span>
+    <span>Best: <span id="best">0</span> &nbsp;<button id="mute">🔊</button></span>
+  </div>
+  <div class="overlay" id="overlay">
+    <h1>SKY DASH</h1>
+    <p>Move with ← → or drag your mouse / finger.<br>
+       Dodge the danger • grab the <b style="color:#ffdf2a">stars</b>!<br>
+       Catch the <b style="color:#7fd4ff">shield</b> to smash rocks for bonus points.</p>
+    <button id="start">Start Flying</button>
+  </div>
+  <div id="tip" style="display:none;">Level <span id="lvl"></span> • Speed up!</div>
+</div>
+
+<script>
+(() => {
+  const canvas = document.getElementById('game');
+  const ctx = canvas.getContext('2d');
+  const W = canvas.width, H = canvas.height;
+  const scoreEl = document.getElementById('score');
+  const bestEl = document.getElementById('best');
+  const lvlEl = document.getElementById('lvl');
+  const overlay = document.getElementById('overlay');
+  const tip = document.getElementById('tip');
+  const shieldEl = document.getElementById('shield');
+  const shieldTimeEl = document.getElementById('shieldTime');
+  const muteBtn = document.getElementById('mute');
+
+  let best = +(localStorage.getItem('skyDashBest') || 0);
+  bestEl.textContent = best;
+
+  const state = {
+    running: false,
+    score: 0,
+    speed: 4,
+    spawnTimer: 0,
+    shield: 0,
+    shake: 0,
+    last: 0,
+    stars: [],
+    rocks: [],
+    pills: [],
+    clouds: [],
+    particles: [],
+    explosion: null
+  };
+
+  const plane = { x: W / 2, y: H - 110, targetX: W / 2 };
+
+  const rand = (min, max) => min + Math.random() * (max - min);
+  const clamp = (v, min, max) => Math.max(min, Math.min(max, v));
+  const circleHit = (ax, ay, ar, bx, by, br) => {
+    const dx = ax - bx, dy = ay - by, rr = ar + br;
+    return dx * dx + dy * dy < rr * rr;
+  };
+
+  const audio = {
+    ctx: null,
+    muted: false,
+    ensure: () => {
+      if (!audio.ctx) audio.ctx = new (window.AudioContext || window.webkitAudioContext)();
+      if (audio.ctx.state === 'suspended') audio.ctx.resume();
+    },
+    tone: (freq, dur, type = 'sine', vol = 0.15, when = 0, slideTo = null) => {
+      if (audio.muted || !audio.ctx) return;
+      const t = audio.ctx.currentTime + when;
+      const o = audio.ctx.createOscillator();
+      const g = audio.ctx.createGain();
+      o.type = type;
+      o.frequency.setValueAtTime(freq, t);
+      if (slideTo) o.frequency.exponentialRampToValueAtTime(slideTo, t + dur);
+      g.gain.setValueAtTime(vol, t);
+      g.gain.exponentialRampToValueAtTime(0.001, t + dur);
+      o.connect(g).connect(audio.ctx.destination);
+      o.start(t); o.stop(t + dur + 0.02);
+    },
+    collect: () => { audio.tone(660, 0.12, 'sine', 0.15); audio.tone(990, 0.18, 'sine', 0.12, 0.08); },
+    bonus:  () => { [523, 659, 784].forEach((f, i) => audio.tone(f, 0.12, 'square', 0.09, i * 0.09)); },
+    shield: () => { audio.tone(880, 0.4, 'sine', 0.12, 0, 1320); audio.tone(1320, 0.5, 'sine', 0.1, 0.1, 1760); },
+    crash:  () => { audio.tone(220, 0.5, 'sawtooth', 0.2, 0, 40); audio.tone(110, 0.7, 'square', 0.12, 0.05, 30); }
+  };
+
+  const makeCloud = () => ({
+    x: Math.random() * W,
+    y: Math.random() * (H - 120),
+    s: rand(40, 100),
+    v: rand(0.4, 1),
+    a: rand(0.5, 0.8)
+  });
+
+  const spawnClouds = () => { Array.from({ length: 7 }, makeCloud).forEach(c => state.clouds.push(c)); };
+
+  const addStar = () => state.stars.push({ x: rand(30, W - 30), y: -20, t: Math.random() * Math.PI * 2 });
+
+  const addRock = () => {
+    const side = Math.random() < 0.5 ? -1 : 1;
+    state.rocks.push({
+      x: side === -1 ? -40 : W + 40,
+      y: rand(40, H - 220),
+      r: rand(18, 40),
+      vx: side * rand(2, 3.8),
+      vy: Math.random() < 0.3 ? rand(0.3, 2.3) * 2 : rand(-0.6, 0.6) * 1.2,
+      rot: Math.random() * Math.PI,
+      vr: rand(-0.5, 0.5) * 0.1
+    });
+  };
+
+  const addPill = () => state.pills.push({ x: rand(30, W - 30), y: -20, t: Math.random() * Math.PI * 2 });
+
+  const burst = (x, y, color, n, spread = 1) => {
+    for (let i = 0; i < n; i++) {
+      state.particles.push({
+        x, y,
+        vx: rand(-1, 1) * 140 * spread,
+        vy: rand(-1.6, -0.2) * 90 * spread,
+        life: rand(0.4, 0.9),
+        max: 0.9,
+        s: rand(2, 5),
+        color
+      });
+    }
+  };
+
+  const explode = (x, y) => {
+    state.explosion = { x, y, t: 0 };
+    state.shake = 18;
+    burst(x, y, '#ff5f57', 26, 1.6);
+    burst(x, y, '#ffb703', 18, 1.2);
+    burst(x, y, '#ffdf2a', 10, 0.8);
+  };
+
+  const reset = () => {
+    state.score = 0;
+    state.speed = 4;
+    state.spawnTimer = 0;
+    state.shield = 0;
+    state.shake = 0;
+    state.stars = [];
+    state.rocks = [];
+    state.pills = [];
+    state.particles = [];
+    state.explosion = null;
+    plane.x = W / 2; plane.targetX = W / 2;
+    scoreEl.textContent = '0';
+    shieldEl.style.display = 'none';
+    tip.style.display = 'none';
+  };
+
+  const drawGround = () => {
+    ctx.fillStyle = '#7fbf4d';
+    ctx.fillRect(0, H - 14, W, 14);
+    ctx.fillStyle = '#5a9e3a';
+    ctx.fillRect(0, H - 6, W, 6);
+  };
+
+  const drawCloud = c => {
+    ctx.save();
+    ctx.globalAlpha = c.a;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.arc(c.x, c.y, c.s * 0.5, 0, Math.PI * 2);
+    ctx.arc(c.x + c.s * 0.5, c.y + c.s * 0.15, c.s * 0.35, 0, Math.PI * 2);
+    ctx.arc(c.x - c.s * 0.5, c.y + c.s * 0.15, c.s * 0.35, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const drawStar = s => {
+    const r = 13;
+    ctx.save();
+    ctx.translate(s.x, s.y + Math.sin(s.t) * 8);
+    ctx.rotate(s.t * 0.5);
+    ctx.fillStyle = '#ffdf2a';
+    ctx.strokeStyle = '#f5b300';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    for (let i = 0; i < 10; i++) {
+      const rad = i % 2 === 0 ? r : r * 0.45;
+      const a = (i * Math.PI) / 5 - Math.PI / 2;
+      ctx.lineTo(Math.cos(a) * rad, Math.sin(a) * rad);
+    }
+    ctx.closePath();
+    ctx.fill();
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawPill = p => {
+    ctx.save();
+    ctx.translate(p.x, p.y + Math.sin(p.t) * 6);
+    ctx.shadowColor = '#7fd4ff';
+    ctx.shadowBlur = 14;
+    ctx.fillStyle = '#5fc8ff';
+    ctx.strokeStyle = '#ffffff';
+    ctx.lineWidth = 2;
+    ctx.beginPath();
+    ctx.arc(0, 0, 15, Math.PI * 0.5, Math.PI * 1.5, true);
+    ctx.fill();
+    ctx.stroke();
+    ctx.fillStyle = '#9fe0ff';
+    ctx.shadowBlur = 0;
+    ctx.beginPath();
+    ctx.arc(1, -2, 3, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#004c8f';
+    ctx.beginPath();
+    ctx.arc(0, -4, 4, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const drawRock = r => {
+    ctx.save();
+    ctx.translate(r.x, r.y);
+    ctx.rotate(r.rot);
+    ctx.fillStyle = '#5b6b7a';
+    ctx.beginPath();
+    ctx.moveTo(-r.r, r.r * 0.3);
+    ctx.lineTo(-r.r * 0.5, -r.r);
+    ctx.lineTo(r.r * 0.4, -r.r * 0.8);
+    ctx.lineTo(r.r, 0);
+    ctx.lineTo(r.r * 0.6, r.r);
+    ctx.lineTo(-r.r * 0.3, r.r * 0.8);
+    ctx.closePath();
+    ctx.fill();
+    ctx.strokeStyle = '#3c4856';
+    ctx.lineWidth = 2;
+    ctx.stroke();
+    ctx.restore();
+  };
+
+  const drawFlame = () => {
+    const f = rand(0.7, 1.3);
+    ctx.save();
+    ctx.translate(plane.x - 30, plane.y);
+    ctx.fillStyle = '#ff5f00';
+    ctx.globalAlpha = 0.9;
+    ctx.beginPath();
+    ctx.moveTo(0, -5);
+    ctx.quadraticCurveTo(-22 * f, 0, 0, 5);
+    ctx.closePath();
+    ctx.fill();
+    ctx.fillStyle = '#ffc400';
+    ctx.beginPath();
+    ctx.moveTo(0, -3);
+    ctx.quadraticCurveTo(-13 * f, 0, 0, 3);
+    ctx.closePath();
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const drawPlane = () => {
+    const tilt = clamp((plane.x - plane.targetX) * 0.005, -0.25, 0.25);
+    ctx.save();
+    ctx.translate(plane.x, plane.y);
+    ctx.rotate(tilt);
+
+    if (state.shield > 0) {
+      ctx.globalAlpha = 0.25 + Math.sin(performance.now() / 120) * 0.08;
+      ctx.fillStyle = '#7fd4ff';
+      ctx.beginPath();
+      ctx.arc(0, 0, 44, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.globalAlpha = 1;
+    }
+
+    ctx.strokeStyle = '#c8d6e5';
+    ctx.lineWidth = 1.5;
+    ctx.fillStyle = '#fff';
+    ctx.beginPath();
+    ctx.ellipse(0, 0, 30, 14, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.stroke();
+
+    ctx.fillStyle = '#ff5f57';
+    ctx.beginPath();
+    ctx.moveTo(30, 0);
+    ctx.lineTo(18, -9);
+    ctx.lineTo(18, 9);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#5ea9f5';
+    ctx.beginPath();
+    ctx.moveTo(-6, -4); ctx.lineTo(6, -40); ctx.lineTo(20, -40); ctx.lineTo(12, -4);
+    ctx.closePath();
+    ctx.fill();
+    ctx.beginPath();
+    ctx.moveTo(-6, 4); ctx.lineTo(6, 40); ctx.lineTo(20, 40); ctx.lineTo(12, 4);
+    ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#ffb703';
+    ctx.beginPath();
+    ctx.moveTo(-28, 0); ctx.lineTo(-36, -14); ctx.lineTo(-24, -12); ctx.closePath();
+    ctx.fill();
+
+    ctx.fillStyle = '#45a0e0';
+    ctx.beginPath();
+    ctx.ellipse(18, 0, 6, 8, 0, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+
+    if (state.running) drawFlame();
+  };
+
+  const drawExplosion = () => {
+    const e = state.explosion;
+    if (!e) return;
+    const p = e.t / 0.9;
+    const r = 20 + p * 70;
+    ctx.save();
+    ctx.globalAlpha = 1 - p;
+    ctx.fillStyle = '#ffb703';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#ff5f57';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 0.6, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.fillStyle = '#fff7d6';
+    ctx.beginPath();
+    ctx.arc(e.x, e.y, r * 0.25, 0, Math.PI * 2);
+    ctx.fill();
+    ctx.restore();
+  };
+
+  const drawParticles = () => {
+    for (const p of state.particles) {
+      ctx.save();
+      ctx.globalAlpha = clamp(p.life / p.max, 0, 1);
+      ctx.fillStyle = p.color;
+      ctx.beginPath();
+      ctx.arc(p.x, p.y, p.s, 0, Math.PI * 2);
+      ctx.fill();
+      ctx.restore();
+    }
+  };
+
+  const tick = dt => {
+    for (const c of state.clouds) {
+      c.x -= c.v * dt * 20;
+      if (c.x < -120) { c.x = W + 120; c.y = Math.random() * (H - 120); }
+    }
+    for (let i = state.particles.length - 1; i >= 0; i--) {
+      const p = state.particles[i];
+      p.life -= dt;
+      p.x += p.vx * dt;
+      p.y += p.vy * dt;
+      p.vy += 60 * dt;
+      if (p.life <= 0) state.particles.splice(i, 1);
+    }
+    if (state.explosion) {
+      state.explosion.t += dt;
+      if (state.explosion.t > 0.9) state.explosion = null;
+    }
+    state.shake = Math.max(0, state.shake - dt * 40);
+    if (state.shield > 0) {
+      state.shield -= dt;
+      if (state.shield <= 0) {
+        state.shield = 0;
+        shieldEl.style.display = 'none';
+      } else {
+        shieldTimeEl.textContent = state.shield.toFixed(1) + 's';
+      }
+    }
+  };
+
+  const update = dt => {
+    plane.targetX = clamp(plane.targetX, 34, W - 34);
+    plane.x += (plane.targetX - plane.x) * Math.min(1, dt * 10);
+
+    state.score += dt * 10;
+    scoreEl.textContent = Math.floor(state.score);
+
+    const lvl = 1 + Math.floor(state.score / 1000);
+    state.speed = 4 + lvl * 0.6;
+    lvlEl.textContent = lvl;
+    tip.style.display = lvl > 1 ? 'block' : 'none';
+
+    state.spawnTimer -= dt;
+    if (state.spawnTimer <= 0) {
+      for (let i = 0; i < lvl; i++) addRock();
+      state.spawnTimer = Math.max(0.5, 1.4 - lvl * 0.1);
+    }
+    if (Math.random() < dt * 2.2) addStar();
+    if (Math.random() < dt * 0.35) addPill();
+
+    for (let i = state.stars.length - 1; i >= 0; i--) {
+      const s = state.stars[i];
+      s.y += dt * (state.speed + 2);
+      s.t += dt * 2;
+      if (s.y > H + 20) { state.stars.splice(i, 1); continue; }
+      if (circleHit(s.x, s.y, 16, plane.x, plane.y, 24)) {
+        state.score += 50;
+        scoreEl.textContent = Math.floor(state.score);
+        burst(s.x, s.y, '#ffdf2a', 10);
+        audio.collect();
+        state.stars.splice(i, 1);
+      }
+    }
+
+    for (let i = state.pills.length - 1; i >= 0; i--) {
+      const p = state.pills[i];
+      p.y += dt * (state.speed + 3);
+      p.t += dt * 2;
+      if (p.y > H + 20) { state.pills.splice(i, 1); continue; }
+      if (circleHit(p.x, p.y, 18, plane.x, plane.y, 24)) {
+        state.shield = 5;
+        shieldEl.style.display = 'inline';
+        burst(p.x, p.y, '#7fd4ff', 14);
+        audio.shield();
+        state.pills.splice(i, 1);
+      }
+    }
+
+    for (let i = state.rocks.length - 1; i >= 0; i--) {
+      const r = state.rocks[i];
+      r.x += r.vx * dt * 20;
+      r.y += r.vy * dt * 20;
+      r.rot += r.vr * dt * 10;
+      if (r.y < r.r + 8) { r.y = r.r + 8; r.vy = Math.abs(r.vy); }
+      if (r.y > H - r.r - 14) { r.y = H - r.r - 14; r.vy = -Math.abs(r.vy); }
+      if (r.x < -60 || r.x > W + 60) { state.rocks.splice(i, 1); continue; }
+      if (circleHit(r.x, r.y, r.r - 3, plane.x, plane.y, 22)) {
+        if (state.shield > 0) {
+          state.score += 25;
+          scoreEl.textContent = Math.floor(state.score);
+          burst(r.x, r.y, '#5b6b7a', 12);
+          audio.bonus();
+          state.rocks.splice(i, 1);
+        } else {
+          endGame();
+          return;
+        }
+      }
+    }
+  };
+
+  const draw = () => {
+    ctx.save();
+    if (state.shake > 0) ctx.translate(rand(-state.shake, state.shake), rand(-state.shake, state.shake));
+    ctx.clearRect(-20, -20, W + 40, H + 40);
+    state.clouds.slice().sort((a, b) => a.s - b.s).forEach(drawCloud);
+    state.pills.forEach(drawPill);
+    state.stars.forEach(drawStar);
+    state.rocks.forEach(drawRock);
+    drawGround();
+    drawPlane();
+    drawParticles();
+    drawExplosion();
+    ctx.restore();
+  };
+
+  const loop = ts => {
+    const dt = Math.min(0.05, (ts - state.last) / 1000 || 0.016);
+    state.last = ts;
+    tick(dt);
+    if (state.running) update(dt);
+    draw();
+    requestAnimationFrame(loop);
+  };
+
+  const endGame = () => {
+    state.running = false;
+    const finalScore = Math.floor(state.score);
+    if (finalScore > best) {
+      best = finalScore;
+      localStorage.setItem('skyDashBest', best);
+      bestEl.textContent = best;
+    }
+    explode(plane.x, plane.y);
+    state.shield = 0;
+    shieldEl.style.display = 'none';
+    audio.crash();
+    document.querySelector('.overlay h1').textContent = 'GAME OVER ✈';
+    document.querySelector('.overlay p').innerHTML =
+      'You flew <b>' + finalScore + '</b> points this run. Best: <b>' + best + '</b>.';
+    setTimeout(() => { overlay.style.display = 'flex'; }, 700);
+  };
+
+  const startGame = () => {
+    audio.ensure();
+    reset();
+    overlay.style.display = 'none';
+    state.running = true;
+    audio.collect();
+  };
+
+  document.getElementById('start').addEventListener('click', startGame);
+
+  muteBtn.addEventListener('click', () => {
+    audio.muted = !audio.muted;
+    muteBtn.textContent = audio.muted ? '🔇' : '🔊';
+  });
+
+  canvas.addEventListener('mousemove', e => {
+    const rect = canvas.getBoundingClientRect();
+    plane.targetX = (e.clientX - rect.left) * (W / rect.width);
+  });
+
+  canvas.addEventListener('touchmove', e => {
+    e.preventDefault();
+    const rect = canvas.getBoundingClientRect();
+    plane.targetX = (e.touches[0].clientX - rect.left) * (W / rect.width);
+  }, { passive: false });
+
+  window.addEventListener('keydown', e => {
+    if (e.key === 'ArrowLeft') plane.targetX -= 26;
+    if (e.key === 'ArrowRight') plane.targetX += 26;
+    if ((e.key === ' ' || e.key === 'Enter') && !state.running) startGame();
+  });
+
+  spawnClouds();
+  reset();
+  requestAnimationFrame(loop);
+})();
+</script>
+</body>
+</html>
