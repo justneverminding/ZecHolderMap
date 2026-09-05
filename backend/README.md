@@ -17,6 +17,14 @@ python3 backend/server.py
 
 Open `http://127.0.0.1:4173`. The public map deliberately hides a region until it has five valid receipts. Repeat the command with five unique test receipt IDs to make a region appear.
 
+## Tests
+
+```bash
+cd backend && python3 -m unittest discover -s tests -p 'test_*.py' -v
+```
+
+Each test runs against a fresh temporary SQLite database; the storage directory is never touched.
+
 ## Public API
 
 - `GET /api/map` returns only regions at or above the display threshold.
