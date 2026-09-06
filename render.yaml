@@ -1,0 +1,19 @@
+services:
+  - type: web
+    name: zec-holder-map
+    runtime: python
+    plan: free
+    rootDir: .
+    buildCommand: ""
+    startCommand: python backend/server.py
+    healthCheckPath: /api/stats
+    autoDeploy: true
+    envVars:
+      - key: HOLDER_MAP_HOST
+        value: "0.0.0.0"
+      - key: HOLDER_MAP_DATABASE
+        value: /var/lib/holdermap/holdermap.sqlite
+    disk:
+      name: holdermap-storage
+      mountPath: /var/lib/holdermap
+      sizeGB: 1

@@ -1,0 +1,5 @@
+{
+  "$schema": "https://openapi.vercel.sh/vercel.json",
+  "buildCommand": "mkdir -p dist && cp index.html app.js styles.css dist/ && sed -i 's|apiBase: \"\"|apiBase: \"'$HOLDER_MAP_API_URL'\"|' dist/index.html",
+  "outputDirectory": "dist"
+}

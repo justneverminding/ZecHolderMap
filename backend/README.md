@@ -40,14 +40,15 @@ Each test runs against a fresh temporary SQLite database; the storage directory 
 
 ## Deployment
 
-`server.py` serves both the static map and the JSON API, so a single instance is enough.
+Two independent pieces:
 
-- Set `HOLDER_MAP_HOST=0.0.0.0` to accept external connections (the safe localhost default is intentional).
-- Set `PORT` to the platform-injected port (Render/Fly/Railway each provide one).
-- Store `HOLDER_MAP_DATABASE` (or the `storage/` directory) on a persistent volume so counts survive restarts.
-- API responses carry `Access-Control-Allow-Origin: *` and `Cache-Control: no-store`, so the GitHub Pages frontend can fetch them. Point the site at the deployed API by setting `apiBase` in `index.html`.
+**Backend (any host with a persistent disk — Render/Fly/Railway/VPS).** Vercel cannot run this service: it needs a long-running process and a writable filesystem. The `render.yaml` at the repo root is one such option — a free web service that runs `backend/server.py`:
+- `HOLDER_MAP_HOST=0.0.0.0` so the host's proxy can reach it.
+- `HOLDER_MAP_DATABASE` points at a persistent disk, so counts survive restarts and deploys.
+- The host injects `PORT` automatically; the process reads it.
+- Expose one public URL, then set Vercel's `HOLDER_MAP_API_URL` to it.
 
-TLS is terminated by the hosting platform's proxy; the process itself stays plain HTTP on the injected port.
+**Frontend (Vercel).** `vercel.json` builds a `dist/` bundle (html + css + js) and injects the deployed API URL into `index.html` from the project environment variable `HOLDER_MAP_API_URL` (Vercel → Project → Settings → Environment Variables). Until that variable is set, `apiBase` stays `""` and the site serves clearly-labelled prototype data.
 
 ## Public API
 

@@ -1,0 +1,10 @@
+# SQLite database (private, contains receipt identifiers)
+backend/storage/*.sqlite
+backend/storage/*.sqlite-*
+
+# Z3 local checkout (vendored, pinned via GitHub, not part of this project)
+.z3-regtest/
+
+# Python
+__pycache__/
+*.pyc
