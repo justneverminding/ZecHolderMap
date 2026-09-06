@@ -42,11 +42,20 @@ Each test runs against a fresh temporary SQLite database; the storage directory 
 
 Two independent pieces:
 
-**Backend (any host with a persistent disk — Render/Fly/Railway/VPS).** Vercel cannot run this service: it needs a long-running process and a writable filesystem. The `render.yaml` at the repo root is one such option — a free web service that runs `backend/server.py`:
-- `HOLDER_MAP_HOST=0.0.0.0` so the host's proxy can reach it.
-- `HOLDER_MAP_DATABASE` points at a persistent disk, so counts survive restarts and deploys.
-- The host injects `PORT` automatically; the process reads it.
-- Expose one public URL, then set Vercel's `HOLDER_MAP_API_URL` to it.
+**Backend (Render).** `render.yaml` defines a free web service plus a free Postgres database:
+- The web service runs `backend/server.py` with `HOLDER_MAP_HOST=0.0.0.0`; Render injects `PORT` automatically.
+- `HOLDER_MAP_DATABASE` is wired to the `holder_map` Postgres instance via `fromDatabase` — SQLite cannot persist on a free Render service, because free services have an ephemeral filesystem and cannot attach disks.
+- Postgres makes the schema compatible: `database.py` opens the same tables and queries against `postgres://` URLs (via pg8000) or local SQLite paths.
+
+Note the free Postgres **expires 30 days after creation** (then a 14-day grace period before deletion). Upgrade it to a paid plan when that matters.
+
+**Ingesting from your machine.** The operator runs the ingestion locally, targeting the same database URL:
+
+```bash
+HOLDER_MAP_DATABASE='postgres://...' python3 backend/ingest_receipt.py --receipt-id <txid>:<output_index> --memo HOLDERMAP:NG
+```
+
+(Install the local dependency with `pip install -r backend/requirements.txt`.) There is still no internet-facing ingestion endpoint — decrypting and calling the CLI stays on your machine.
 
 **Frontend (Vercel).** `vercel.json` builds a `dist/` bundle (html + css + js) and injects the deployed API URL into `index.html` from the project environment variable `HOLDER_MAP_API_URL` (Vercel → Project → Settings → Environment Variables). Until that variable is set, `apiBase` stays `""` and the site serves clearly-labelled prototype data.
 
