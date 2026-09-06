@@ -27,7 +27,7 @@
       <section class="map-section" aria-label="Global Holder Map">
         <div class="map-heading wrap">
           <div><p class="eyebrow"><span></span> sample network view</p><h2>The Zcash community, in aggregate.</h2></div>
-          <div class="live"><i></i> live when mainnet launches</div>
+          <div class="live"><i></i> live on mainnet</div>
         </div>
         <div class="map-shell" id="map" role="img" aria-label="Stylized world map with anonymous Holder Map signals"></div>
         <div class="map-legend wrap"><span>lower signal</span><div class="gradient"></div><span>higher signal</span><span class="disclosure">Counts under 5 stay hidden</span></div>
@@ -40,15 +40,15 @@
       </section>
 
       <section id="signal" class="signal wrap">
-        <div class="signal-copy"><p class="eyebrow"><span></span> when mainnet opens</p><h2>Signal your country.<br />Nothing more.</h2><p>Choose your country, then send a shielded ZEC transaction with a tiny structured memo. No account. No wallet connection. No identifying map pin.</p></div>
+        <div class="signal-copy"><p class="eyebrow"><span></span> send a shielded receipt</p><h2>Signal your country.<br />Nothing more.</h2><p>Choose your country, then send a shielded ZEC transaction with a tiny structured memo. No account. No wallet connection. No identifying map pin.</p></div>
         <div class="receipt-card">
-          <div class="card-top"><span>shielded receipt</span><span class="test-badge">PLANNED</span></div>
+          <div class="card-top"><span>shielded receipt</span><span class="test-badge">LIVE</span></div>
           <label for="country">Your coarse region</label>
           <select id="country" aria-label="Choose your country"></select>
           <p class="memo-label">memo to include</p>
           <code id="memo">HOLDERMAP:NG</code>
           <button class="copy-button" id="copy-memo" type="button">Copy memo</button>
-          <p class="card-note">The mailbox address will be published at launch. Only a country code is accepted.</p>
+          <p class="card-note">Send the memo in a shielded transaction to <code id="mailbox">this map's mailbox address</code>. Only a country code is accepted.</p>
         </div>
       </section>
 
@@ -64,7 +64,11 @@
     <footer class="wrap"><span>Built for the Zcash community.</span><span>Prototype · no tracking · no wallet connection</span></footer>
     <div id="toast" role="status" aria-live="polite"></div>
     <script>
-      window.HOLDER_MAP_CONFIG = { apiBase: "" };
+      window.HOLDER_MAP_CONFIG = {
+        apiBase: "",
+        mailboxAddress:
+          "u1a2v6haulkuygrywt723h4gkgrvx6qrj854u49e42m7d82xt0l0xx5lvlq9rs33njqzawrzr7ssnhguwgh582scjzvy32z5x6t96878jg4wfuyzvv8fyss79l40x845n4qwz68z34eqms85pvrc4jwhcq2hqpaf3d93nxhlexkqwzacc6",
+      };
     </script>
     <script src="app.js"></script>
   </body>

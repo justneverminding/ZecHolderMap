@@ -40,6 +40,8 @@ function renderMap() {
 renderMap();
 
 const apiBase = (window.HOLDER_MAP_CONFIG && window.HOLDER_MAP_CONFIG.apiBase) || "";
+const mailboxAddress = (window.HOLDER_MAP_CONFIG && window.HOLDER_MAP_CONFIG.mailboxAddress) || "";
+if (mailboxAddress) document.querySelector("#mailbox").textContent = mailboxAddress;
 
 async function loadAggregateCounts() {
   try {

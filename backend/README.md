@@ -1,12 +1,25 @@
 # Holder Map testnet backend
 
-This is a local, testnet-only scaffold. It has three deliberately separate responsibilities:
+The backend keeps three deliberately separate responsibilities:
 
-- `ingest_receipt.py` accepts a memo and a private receipt identifier from a future trusted Zcash listener.
+- `ingest_receipt.py` accepts a memo and a private receipt identifier, already decrypted by the mailbox wallet.
 - `database.py` validates, deduplicates, and aggregates the event in SQLite.
 - `server.py` exposes aggregate-only read endpoints and can serve the static map.
 
-It does **not** create a wallet, hold a spending key, connect to a Zcash node, or expose an internet-facing ingestion endpoint. A future listener must pass already-decrypted shielded memos to the ingestion command locally.
+It does **not** create a wallet, hold a key, connect to a Zcash node, or expose an internet-facing ingestion endpoint. Decryption happens in the wallet that owns the mailbox address — on whichever machine you run — and only the plaintext country code reaches this backend.
+
+## Mailbox flow
+
+1. The map publishes a shielded mailbox address (`HOLDER_MAP_CONFIG.mailboxAddress`).
+2. Someone sends a `HOLDERMAP:XX` memo in a shielded transaction to it.
+3. Your wallet shows the decrypted memo in its transaction list.
+4. You (or your wallet script) pass the decrypted memo locally:
+
+```bash
+python3 backend/ingest_receipt.py --receipt-id <txid>:<output_index> --memo HOLDERMAP:NG
+```
+
+`<txid>:<output_index>` is the stable deduplication key. Only a valid ISO 3166-1 alpha-2 country code is accepted; anything else is rejected.
 
 ## Local test
 
